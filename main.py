@@ -11,8 +11,10 @@ import matplotlib.pyplot as pltq
 # ARUCO MARKER SIDE LENGTH (meters)
 aruco_marker_side_length = 0.1415
 
-# TARGET DISTANCE FROM TAG (meters)
-targetZ = 0.5
+# TARGET POSITION FROM TAG (meters)
+targetZ = 1
+targetX = 0
+targetY = 0
 
 count = 0
 
@@ -97,11 +99,12 @@ def initCV():
 transform_translation_x = 0
 transform_translation_y = 0
 transform_translation_z = 0
+yaw_z = 0
 
 marker_ids = None
 
 def detectTags(frame):
-    global corners, ids, rejected, aruco_dict, parameters, aruco_marker_side_length, transform_translation_x, transform_translation_y, transform_translation_z, marker_ids
+    global corners, ids, rejected, aruco_dict, parameters, aruco_marker_side_length, transform_translation_x, transform_translation_y, transform_translation_z, marker_ids, yaw_z
     if len(frame.shape) == 2:  # Grayscale image
         frame = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
     elif frame.shape[2] == 4:  # RGBA image
@@ -156,7 +159,7 @@ def detectTags(frame):
             # print("transform_translation_z: {}".format(transform_translation_z))
             # print("roll_x: {}".format(roll_x))
             # print("pitch_y: {}".format(pitch_y))
-            # print("yaw_z: {}".format(yaw_z))
+            print("yaw_z: {}".format(yaw_z))
             # print()
 
             # Draw the axes on the marker
@@ -171,36 +174,39 @@ initCV()
 error = 0.05
 
 def move():
-    global targetX, targetY, targetZ, transform_translation_x, transform_translation_y, transform_translation_z, marker_ids
+    global targetX, targetY, targetZ, transform_translation_x, transform_translation_y, transform_translation_z, marker_ids, targetYaw
 
-    zdif = int(targetZ - transform_translation_z)
+    zdif = targetZ - transform_translation_z
+    xdif = targetX - transform_translation_x
+    ydif = targetY - transform_translation_y
 
     speed = 100
+    vertSpeed = 10
     rotSpeed = 100
 
     forward_back = 0
     left_right = 0
     up_down = 0
+    yaw = 0
     if marker_ids is not None:
-        forward_back = -int(zdif * speed )
-        left_right = int(transform_translation_x * speed )
-        up_down = int(transform_translation_y) * 25
+        forward_back = -int(zdif * speed)
+        left_right = -int(xdif * speed )
+        up_down = -int(ydif * vertSpeed)
+        yaw = -int(xdif * rotSpeed)
     print("left-right: ", left_right)
     print("forward-back: ", forward_back)
     print("up-down: ", up_down)
     print("rotation: ", rotSpeed * transform_translation_x)
 
     if tello.is_flying:
-        tello.send_rc_control(left_right, forward_back, up_down, int(transform_translation_x * rotSpeed))
-
-tello.takeoff()
+        tello.send_rc_control(left_right, forward_back, up_down, yaw)
 
 while True:
     # video handling
     frame = frameRead.frame
     detectTags(frame)
-    # if tello.is_flying:
-    move()
+    if tello.is_flying:
+        move()
     cv2.aruco.drawDetectedMarkers(frame, corners, ids)
     cv2.imshow("Live View", frame)
     if cv2.waitKey(1) & 0xFF == ord('q'):
