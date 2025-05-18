@@ -171,7 +171,7 @@ listener.start()
 
 initCV()
 
-error = 0.05
+error = 1
 
 def move():
     global targetX, targetY, targetZ, transform_translation_x, transform_translation_y, transform_translation_z, marker_ids, targetYaw
@@ -179,10 +179,11 @@ def move():
     zdif = targetZ - transform_translation_z
     xdif = targetX - transform_translation_x
     ydif = targetY - transform_translation_y
+    rdif = -yaw_z
 
     speed = 100
-    vertSpeed = 10
-    rotSpeed = 100
+    vertSpeed = 100
+    rotSpeed = 10
 
     forward_back = 0
     left_right = 0
@@ -191,8 +192,9 @@ def move():
     if marker_ids is not None:
         forward_back = -int(zdif * speed)
         left_right = -int(xdif * speed )
-        up_down = -int(ydif * vertSpeed)
-        yaw = -int(xdif * rotSpeed)
+        up_down = int(ydif * vertSpeed)
+        if abs(rdif) > error:
+            yaw = -int(rdif * rotSpeed)
     print("left-right: ", left_right)
     print("forward-back: ", forward_back)
     print("up-down: ", up_down)
