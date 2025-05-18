@@ -8,6 +8,12 @@ import numpy as np
 from scipy.spatial.transform import Rotation as R
 import matplotlib.pyplot as pltq
 
+# ARUCO MARKER SIDE LENGTH (meters)
+aruco_marker_side_length = 0.1415
+
+# TARGET DISTANCE FROM TAG (meters)
+targetZ = 0.5
+
 count = 0
 
 width = 320
@@ -75,7 +81,6 @@ aruco_dict = None
 parameters = None
 mtx = None
 dst = None
-aruco_marker_side_length = 0.1415
 
 def initCV():
     global aruco_dict, parameters, mtx, dst
@@ -163,17 +168,12 @@ listener.start()
 
 initCV()
 
-targetX = 0
-targetY = 0
-targetZ = 0.5
 error = 0.05
 
 def move():
     global targetX, targetY, targetZ, transform_translation_x, transform_translation_y, transform_translation_z, marker_ids
 
     zdif = int(targetZ - transform_translation_z)
-    xdif = targetX - int(transform_translation_x)
-    ydif = targetY - int(transform_translation_y)
 
     speed = 100
     rotSpeed = 100
