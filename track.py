@@ -213,21 +213,6 @@ def video():
         return False
     return True
 
-def curveFit(dist, targetDist, s):
-    if dist < targetDist:
-        s = -s
-    else:
-        s = s
-
-    speed = s * ((dist - targetDist) ** 2)
-
-    if speed > 100:
-        return 100
-    elif speed < 100:
-        return -100
-    else:
-        return speed
-
 def pid_controller(setpoint, pv, kp, ki, kd, previous_error, integral, dt):
     error = setpoint - pv
     integral += error * dt
@@ -245,8 +230,12 @@ def max(x, maximum):
 
 previousErrorZ = 0
 previousErrorX = 0
+previousErrorYaw = 0
+previousErrorY = 0
 errorZ = 0
 errorX = 0
+errorYaw = 0
+errorY = 0
 
 forward_back = 0
 left_right = 0
@@ -256,13 +245,31 @@ yaw = 0
 dt = 0.01
 
 def track(id):
-    global targetX, targetY, targetZ, transform_translation_x, transform_translation_y, transform_translation_z, marker_ids, targetYaw, frameRead, errorZ, previousErrorX, previousErrorZ, errorX, dt, up_down, yaw, left_right, forward_back
+    global targetX, targetY, targetZ, transform_translation_x, transform_translation_y, transform_translation_z, marker_ids, targetYaw, frameRead, errorZ, previousErrorX, previousErrorZ, errorX, previousErrorYaw, errorYaw, previousErrorY, errorY dt, up_down, yaw, left_right, forward_back
 
     detectTags(frameRead.frame, id)
 
     if marker_ids is not None and id in marker_ids:
-        controlZ, errorZ, integralZ = pid_controller(targetZ, transform_translation_z, 2, 1, 0.005, previousErrorZ, 0, dt)
-        forward_back = -max(int(controlZ * speed), 100)
+        # Forward-Back PID Control
+        controlZ, errorZ, integralZ = pid_controller(targetZ, transform_translation_z, 75, 1, 0.05, previousErrorZ, 0, dt)
+        forward_back = -max(int(controlZ), 100)
+        previous_errorZ = errorZ
+
+        # Left-Right PID Control
+        controlX, errorX, integralX = pid_controller(targetX, transform_translation_x, 75, 1, 0.01, previousErrorX, 0, dt)
+        left_right = -max(int(controlX), 100)
+        previousErrorX = errorX
+
+        # Yaw PID Control (untuned)
+        controlYaw, errorYaw, inegralYaw = pid_controller(targetYaw, yaw_z, 1, 0, 0, previousErrorYaw, 0, dt)
+        yaw = -max(int(controlYaw), 100)
+        previous_errorYaw = errorYaw
+
+        # Up-Down PID Control (untuned)
+        controlY, errorY, integralY = pid_controller(targetY, transform_translation_y, 1, 0, 0, previous_errorYaw, 0, dt)
+        up_down = -max(int(controlY), 100)
+        previous_errorY = errorY
+
     else:
         forward_back = 0
         left_right = 0
