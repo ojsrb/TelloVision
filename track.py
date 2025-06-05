@@ -5,16 +5,17 @@ import time
 from pynput import keyboard
 import numpy as np
 from scipy.spatial.transform import Rotation as R
-import matplotlib.pyplot as pltq
+import matplotlib.pyplot as plt
 import threading
 
 # ARUCO MARKER SIDE LENGTH (meters)
-aruco_marker_side_length = 0.1415
+aruco_marker_side_length = 0.106
 
 # TARGET POSITION FROM TAG (meters)
 targetZ = 1
 targetX = 0
 targetY = 0
+targetYaw = 0
 
 count = 0
 
@@ -51,9 +52,17 @@ def on_press(key):
         tello.takeoff()
 
 def left(dist):
-    tello.move_left(dist)
+    tello.rotate_counter_clockwise(dist)
+    time.sleep(0.1)
 
 def right(dist):
+    tello.rotate_clockwise(dist)
+    time.sleep(0.1)
+
+def strafeLeft(dist):
+    tello.move_left(dist)
+
+def strafeRight(dist):
     tello.move_right(dist)
 
 def forward(dist):
@@ -111,7 +120,7 @@ dst = None
 def initCV():
     global aruco_dict, parameters, mtx, dst
     # Define the dictionary and parameters
-    aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_6X6_250)
+    aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_APRILTAG_36H11)
     parameters = cv2.aruco.DetectorParameters()
 
     cv_file = cv2.FileStorage(
@@ -203,7 +212,7 @@ listener.start()
 initCV()
 
 # for determining when centered
-centerError = 0.25
+centerError = 0.5
 rotError = 10
 
 def video():
@@ -236,6 +245,10 @@ errorZ = 0
 errorX = 0
 errorYaw = 0
 errorY = 0
+integralZ = 0
+integralX = 0
+integralY = 0
+integralYaw = 0
 
 forward_back = 0
 left_right = 0
@@ -244,51 +257,66 @@ yaw = 0
 
 dt = 0.01
 
+xvals = [0]
+yvals = [0]
+
 def track(id):
-    global targetX, targetY, targetZ, transform_translation_x, transform_translation_y, transform_translation_z, marker_ids, targetYaw, frameRead, errorZ, previousErrorX, previousErrorZ, errorX, previousErrorYaw, errorYaw, previousErrorY, errorY dt, up_down, yaw, left_right, forward_back
+    global targetX, targetY, targetZ, transform_translation_x, transform_translation_y, transform_translation_z, marker_ids, targetYaw, frameRead, errorZ, previousErrorX, previousErrorZ, errorX, previousErrorYaw, errorYaw, previousErrorY, errorY, dt, up_down, yaw, left_right, forward_back, targetYaw, integralYaw, integralZ, integralX, integralY
 
     detectTags(frameRead.frame, id)
 
     if marker_ids is not None and id in marker_ids:
-        # Forward-Back PID Control
-        controlZ, errorZ, integralZ = pid_controller(targetZ, transform_translation_z, 75, 1, 0.05, previousErrorZ, 0, dt)
+        # Forward-Back PID Control - 45
+        controlZ, errorZ, integralZ = pid_controller(targetZ, transform_translation_z, 45, 0, 0, previousErrorZ, 0, dt)
         forward_back = -max(int(controlZ), 100)
         previous_errorZ = errorZ
 
+        xvals.append(xvals[-1] + 1)
+        yvals.append(errorZ)
+
         # Left-Right PID Control
-        controlX, errorX, integralX = pid_controller(targetX, transform_translation_x, 75, 1, 0.01, previousErrorX, 0, dt)
+        controlX, errorX, integralX = pid_controller(targetX, transform_translation_x, 45, 0, 0, previousErrorX, 0, dt)
         left_right = -max(int(controlX), 100)
         previousErrorX = errorX
 
-        # Yaw PID Control (untuned)
-        controlYaw, errorYaw, inegralYaw = pid_controller(targetYaw, yaw_z, 1, 0, 0, previousErrorYaw, 0, dt)
-        yaw = -max(int(controlYaw), 100)
-        previous_errorYaw = errorYaw
-
-        # Up-Down PID Control (untuned)
-        controlY, errorY, integralY = pid_controller(targetY, transform_translation_y, 1, 0, 0, previous_errorYaw, 0, dt)
-        up_down = -max(int(controlY), 100)
+        # Up-Down PID Control
+        controlY, errorY, integralY = pid_controller(targetY, transform_translation_y, 75, 0, 0, errorY, 0, dt)
+        up_down = max(int(controlY), 100)
         previous_errorY = errorY
 
+        # controlYaw, errorYaw, integralYaw = pid_controller(targetYaw, yaw_z, 0.1, 0, 0, errorYaw, 0, dt)
+        # yaw = max(int(controlYaw), 100)
+        # previous_errorYaw = errorYaw
+
+        if tello.is_flying:
+            tello.send_rc_control(left_right, forward_back, up_down, 0)
     else:
-        forward_back = 0
-        left_right = 0
-        up_down = 0
+        if tello.is_flying:
+            tello.send_rc_control(0, 0, 0, 0)
      # print("left-right: ", left_right)
-    print("forward-back: ", forward_back)
+    # print("forward-back: ", forward_back)
     # print("up-down: ", up_down)
 
-    if tello.is_flying:
-        tello.send_rc_control(left_right, forward_back, up_down, yaw)
+
 
     if abs(errorZ) < centerError and abs(errorX) < centerError and marker_ids is not None and id in marker_ids:
-        return False
+        return True
     else:
         return False
 
+def graph():
+    plt.plot(xvals, yvals)
+
+    plt.show()
+
 def moveTo(id):
+    countCorrect = 0
     while True:
         if track(id):
+            countCorrect += 1
+        else:
+            countCorrect -= 1
+        if countCorrect > 5:
             break
         if not video():
             break
