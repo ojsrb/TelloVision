@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 import threading
 
 # ARUCO MARKER SIDE LENGTH (meters)
-aruco_marker_side_length = 0.106
+aruco_marker_side_length = 0.1415
 
 # TARGET POSITION FROM TAG (meters)
 targetZ = 1
@@ -120,7 +120,7 @@ dst = None
 def initCV():
     global aruco_dict, parameters, mtx, dst
     # Define the dictionary and parameters
-    aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_APRILTAG_36H11)
+    aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_6X6_50)
     parameters = cv2.aruco.DetectorParameters()
 
     cv_file = cv2.FileStorage(
@@ -139,9 +139,9 @@ marker_ids = []
 def detectTags(frame, id):
     global corners, ids, rejected, aruco_dict, parameters, aruco_marker_side_length, transform_translation_x, transform_translation_y, transform_translation_z, marker_ids, yaw_z, dt
     if len(frame.shape) == 2:  # Grayscale image
-        frame = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
+        frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
     elif frame.shape[2] == 4:  # RGBA image
-        frame = cv2.cvtColor(image, cv2.COLOR_RGBA2BGR)
+        frame = cv2.cvtColor(frame, cv2.COLOR_RGBA2BGR)
 
     # Convert the image to grayscale
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -205,7 +205,11 @@ def detectTags(frame, id):
                 yaw_z = 0
                 pitch_y = 0
                 roll_x = 0
-
+    else:
+        transform_translation_x = 0
+        transform_translation_y = 0
+        transform_translation_z = 0
+        yaw_z = 0
 listener = keyboard.Listener(on_press=on_press)
 listener.start()
 
@@ -280,7 +284,7 @@ def track(id):
         previousErrorX = errorX
 
         # Up-Down PID Control
-        controlY, errorY, integralY = pid_controller(targetY, transform_translation_y, 75, 0, 0, errorY, 0, dt)
+        controlY, errorY, integralY = pid_controller(targetY, transform_translation_y, 75, 0, 0, previousErrorY, 0, dt)
         up_down = max(int(controlY), 100)
         previous_errorY = errorY
 
@@ -291,13 +295,21 @@ def track(id):
         if tello.is_flying:
             tello.send_rc_control(left_right, forward_back, up_down, 0)
     else:
+        previousErrorZ = 0
+        previous_errorX = 0
+        previous_errorY = 0
+        left_right = 0
+        forward_back = 0
+        up_down = 0
+        yaw = 0
+        transform_translation_x = targetX
+        transform_translation_y = targetY
+        transform_translation_z = targetZ
         if tello.is_flying:
             tello.send_rc_control(0, 0, 0, 0)
      # print("left-right: ", left_right)
     # print("forward-back: ", forward_back)
     # print("up-down: ", up_down)
-
-
 
     if abs(errorZ) < centerError and abs(errorX) < centerError and marker_ids is not None and id in marker_ids:
         return True
