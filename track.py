@@ -117,17 +117,26 @@ parameters = None
 mtx = None
 dst = None
 
-def initCV():
-    global aruco_dict, parameters, mtx, dst
-    # Define the dictionary and parameters
-    aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_6X6_50)
-    parameters = cv2.aruco.DetectorParameters()
+trackingType = "face"
+faceClassifier = None
 
-    cv_file = cv2.FileStorage(
-        "calibration_chessboard.yaml", cv2.FILE_STORAGE_READ)
-    mtx = cv_file.getNode('K').mat()
-    dst = cv_file.getNode('D').mat()
-    cv_file.release()
+def initCV():
+    global faceClassifier, trackingType
+    if trackingType == "tag":
+        global aruco_dict, parameters, mtx, dst
+        # Define the dictionary and parameters
+        aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_6X6_50)
+        parameters = cv2.aruco.DetectorParameters()
+
+        cv_file = cv2.FileStorage(
+            "calibration_chessboard.yaml", cv2.FILE_STORAGE_READ)
+        mtx = cv_file.getNode('K').mat()
+        dst = cv_file.getNode('D').mat()
+        cv_file.release()
+    elif trackingType == "face":
+        faceClassifier = cv2.CascadeClassifier(
+            cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+        )
 
 transform_translation_x = 0
 transform_translation_y = 0
@@ -136,7 +145,8 @@ yaw_z = 0
 
 marker_ids = []
 
-def detectTags(frame, id):
+
+def detect(frame, id):
     global corners, ids, rejected, aruco_dict, parameters, aruco_marker_side_length, transform_translation_x, transform_translation_y, transform_translation_z, marker_ids, yaw_z, dt
     if len(frame.shape) == 2:  # Grayscale image
         frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
@@ -146,85 +156,99 @@ def detectTags(frame, id):
     # Convert the image to grayscale
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-    # Create the ArUco detector
-    detector = cv2.aruco.ArucoDetector(aruco_dict, parameters)
+    if trackingType == "tag":
+        # Create the ArUco detector
+        detector = cv2.aruco.ArucoDetector(aruco_dict, parameters)
 
-    # Detect the markers
-    (corners, marker_ids, rejected) = cv2.aruco.detectMarkers(
-        gray, aruco_dict)
-    # print("Detected markers:", ids)
+        # Detect the markers
+        (corners, marker_ids, rejected) = cv2.aruco.detectMarkers(
+            gray, aruco_dict)
+        # print("Detected markers:", ids)
 
-    rvecs, tvecs, obj_points = cv2.aruco.estimatePoseSingleMarkers(
-        corners,
-        aruco_marker_side_length,
-        mtx,
-        dst)
-    if marker_ids is not None:
-        for i, marker_id in enumerate(marker_ids):
-            if marker_id == id:
-                # Store the translation (i.e. position) information
-                transform_translation_x = tvecs[i][0][0]
-                transform_translation_y = tvecs[i][0][1]
-                transform_translation_z = tvecs[i][0][2]
+        rvecs, tvecs, obj_points = cv2.aruco.estimatePoseSingleMarkers(
+            corners,
+            aruco_marker_side_length,
+            mtx,
+            dst)
+        if marker_ids is not None:
+            for i, marker_id in enumerate(marker_ids):
+                if marker_id == id:
+                    # Store the translation (i.e. position) information
+                    transform_translation_x = tvecs[i][0][0]
+                    transform_translation_y = tvecs[i][0][1]
+                    transform_translation_z = tvecs[i][0][2]
 
-                # Store the rotation information
-                rotation_matrix = np.eye(4)
-                rotation_matrix[0:3, 0:3] = cv2.Rodrigues(np.array(rvecs[i][0]))[0]
-                r = R.from_matrix(rotation_matrix[0:3, 0:3])
-                quat = r.as_quat()
+                    # Store the rotation information
+                    rotation_matrix = np.eye(4)
+                    rotation_matrix[0:3, 0:3] = cv2.Rodrigues(np.array(rvecs[i][0]))[0]
+                    r = R.from_matrix(rotation_matrix[0:3, 0:3])
+                    quat = r.as_quat()
 
-                # Quaternion format
-                transform_rotation_x = quat[0]
-                transform_rotation_y = quat[1]
-                transform_rotation_z = quat[2]
-                transform_rotation_w = quat[3]
+                    # Quaternion format
+                    transform_rotation_x = quat[0]
+                    transform_rotation_y = quat[1]
+                    transform_rotation_z = quat[2]
+                    transform_rotation_w = quat[3]
 
-                # Euler angle format in radians
-                roll_x, pitch_y, yaw_z = euler_from_quaternion(transform_rotation_x,
-                                                               transform_rotation_y,
-                                                               transform_rotation_z,
-                                                               transform_rotation_w)
+                    # Euler angle format in radians
+                    roll_x, pitch_y, yaw_z = euler_from_quaternion(transform_rotation_x,
+                                                                   transform_rotation_y,
+                                                                   transform_rotation_z,
+                                                                   transform_rotation_w)
 
-                roll_x = math.degrees(roll_x)
-                pitch_y = math.degrees(pitch_y)
-                yaw_z = math.degrees(yaw_z)
-                # print("transform_translation_x: {}".format(transform_translation_x))
-                # print("transform_translation_y: {}".format(transform_translation_y))
-                # print("transform_translation_z: {}".format(transform_translation_z))
-                # print("roll_x: {}".format(roll_x))
-                # print("pitch_y: {}".format(pitch_y))
-                # print("yaw_z: {}".format(yaw_z))
-                # print()
+                    roll_x = math.degrees(roll_x)
+                    pitch_y = math.degrees(pitch_y)
+                    yaw_z = math.degrees(yaw_z)
+                    # print("transform_translation_x: {}".format(transform_translation_x))
+                    # print("transform_translation_y: {}".format(transform_translation_y))
+                    # print("transform_translation_z: {}".format(transform_translation_z))
+                    # print("roll_x: {}".format(roll_x))
+                    # print("pitch_y: {}".format(pitch_y))
+                    # print("yaw_z: {}".format(yaw_z))
+                    # print()
 
-                # Draw the axes on the marker
-                # cv2.aruco.drawAxis(frame, mtx, dst, rvecs[i], tvecs[i], 0.05)
-            else:
-                transform_translation_x = 0
-                transform_translation_y = 0
-                transform_translation_z = 0
-                yaw_z = 0
-                pitch_y = 0
-                roll_x = 0
-    else:
-        transform_translation_x = 0
-        transform_translation_y = 0
-        transform_translation_z = 0
-        yaw_z = 0
+                    # Draw the axes on the marker
+                    # cv2.aruco.drawAxis(frame, mtx, dst, rvecs[i], tvecs[i], 0.05)
+        else:
+            transform_translation_x = 0
+            transform_translation_y = 0
+            transform_translation_z = 0
+            yaw_z = 0
+    elif trackingType == "face":
+        faces = faceClassifier.detectMultiScale(gray, 1.1, 5)
+        if len(faces) > 0:
+            x, y, w, h = faces[0]
+            cv2.rectangle(frame, (x, y), (x + w, y + h), (255, 0, 0), 2)
+            transform_translation_x = x + w / 2 - width / 2
+            transform_translation_y = y + h / 2 - height / 2
+        else:
+            transform_translation_x = 0
+            transform_translation_y = 0
+
 listener = keyboard.Listener(on_press=on_press)
-listener.start()
-
-initCV()
 
 # for determining when centered
-centerError = 0.5
+centerError = 1
 rotError = 10
 
+tracking = None
+
 def video():
-    cv2.aruco.drawDetectedMarkers(frameRead.frame, corners, ids)
-    cv2.imshow("Live View", frameRead.frame)
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        return False
-    return True
+    while True:
+        if frameRead.frame is None or frameRead.frame.size == 0:
+            continue
+        detect(frameRead.frame, -1)
+        if trackingType == "tag":
+            cv2.aruco.drawDetectedMarkers(frameRead.frame, corners, ids)
+        cv2.imshow("Live View", frameRead.frame)
+        if cv2.waitKey(1) & 0xFF == 32:
+            land()
+            cv2.destroyAllWindows()
+            if tello.is_flying:
+                tello.land()
+            tello.streamoff()
+            break
+
 
 def pid_controller(setpoint, pv, kp, ki, kd, previous_error, integral, dt):
     error = setpoint - pv
@@ -259,70 +283,82 @@ left_right = 0
 up_down = 0
 yaw = 0
 
-dt = 0.01
+dt = 0.05
 
 xvals = [0]
 yvals = [0]
 
+def beginVideo():
+    thread = threading.Thread(target=video)
+    thread.start()
+
 def track(id):
     global targetX, targetY, targetZ, transform_translation_x, transform_translation_y, transform_translation_z, marker_ids, targetYaw, frameRead, errorZ, previousErrorX, previousErrorZ, errorX, previousErrorYaw, errorYaw, previousErrorY, errorY, dt, up_down, yaw, left_right, forward_back, targetYaw, integralYaw, integralZ, integralX, integralY
 
-    detectTags(frameRead.frame, id)
+    print(transform_translation_x)
 
-    if marker_ids is not None and id in marker_ids:
-        # Forward-Back PID Control - 45
-        controlZ, errorZ, integralZ = pid_controller(targetZ, transform_translation_z, 45, 0, 0, previousErrorZ, 0, dt)
-        forward_back = -max(int(controlZ), 100)
-        previous_errorZ = errorZ
+    tracking = id
 
-        xvals.append(xvals[-1] + 1)
-        yvals.append(errorZ)
+    detect(frameRead.frame, id)
+    if trackingType == "tag":
 
-        # Left-Right PID Control
-        controlX, errorX, integralX = pid_controller(targetX, transform_translation_x, 45, 0, 0, previousErrorX, 0, dt)
-        left_right = -max(int(controlX), 100)
-        previousErrorX = errorX
+        if marker_ids is not None and id in marker_ids:
+            # Forward-Back PID Control - 45
+            controlZ, errorZ, integralZ = pid_controller(targetZ, transform_translation_z, 45, 0, 0, previousErrorZ, 0, dt)
+            forward_back = -max(int(controlZ), 100)
+            previous_errorZ = errorZ
 
-        # Up-Down PID Control
-        controlY, errorY, integralY = pid_controller(targetY, transform_translation_y, 75, 0, 0, previousErrorY, 0, dt)
-        up_down = max(int(controlY), 100)
-        previous_errorY = errorY
+            xvals.append(xvals[-1] + 1)
+            yvals.append(errorZ)
 
-        # controlYaw, errorYaw, integralYaw = pid_controller(targetYaw, yaw_z, 0.1, 0, 0, errorYaw, 0, dt)
-        # yaw = max(int(controlYaw), 100)
-        # previous_errorYaw = errorYaw
+            # Left-Right PID Control
+            controlX, errorX, integralX = pid_controller(targetX, transform_translation_x, 45, 0, 0, previousErrorX, 0, dt)
+            left_right = -max(int(controlX), 100)
+            previousErrorX = errorX
 
-        if tello.is_flying:
-            tello.send_rc_control(left_right, forward_back, up_down, 0)
-    else:
-        previousErrorZ = 0
-        previous_errorX = 0
-        previous_errorY = 0
-        left_right = 0
-        forward_back = 0
-        up_down = 0
-        yaw = 0
-        transform_translation_x = targetX
-        transform_translation_y = targetY
-        transform_translation_z = targetZ
-        if tello.is_flying:
-            tello.send_rc_control(0, 0, 0, 0)
-     # print("left-right: ", left_right)
+            # Up-Down PID Control
+            controlY, errorY, integralY = pid_controller(targetY, transform_translation_y, 75, 0, 0, previousErrorY, 0, dt)
+            up_down = max(int(controlY), 100)
+            previous_errorY = errorY
+
+            # controlYaw, errorYaw, integralYaw = pid_controller(targetYaw, yaw_z, 0.1, 0, 0, errorYaw, 0, dt)
+            # yaw = max(int(controlYaw), 100)
+            # previous_errorYaw = errorYaw
+
+            if tello.is_flying:
+                tello.send_rc_control(left_right, forward_back, up_down, 0)
+        else:
+            previousErrorZ = 0
+            previous_errorX = 0
+            previous_errorY = 0
+            left_right = 0
+            forward_back = 0
+            up_down = 0
+            yaw = 0
+            transform_translation_x = targetX
+            transform_translation_y = targetY
+            transform_translation_z = targetZ
+            if tello.is_flying:
+                tello.send_rc_control(0, 0, 0, 0)
+         # print("left-right: ", left_right)
     # print("forward-back: ", forward_back)
     # print("up-down: ", up_down)
+    elif trackingType == "face":
+
 
     if abs(errorZ) < centerError and abs(errorX) < centerError and marker_ids is not None and id in marker_ids:
+        tracking = None
         return True
     else:
         return False
 
 def graph():
     plt.plot(xvals, yvals)
-
     plt.show()
 
 def moveTo(id):
     countCorrect = 0
+    tracking = id
     while True:
         if track(id):
             countCorrect += 1
@@ -330,22 +366,17 @@ def moveTo(id):
             countCorrect -= 1
         if countCorrect > 5:
             break
-        if not video():
-            break
         time.sleep(dt)
+    tracking = None
 
 def setTargetPos(x, y, z):
     global targetX, targetY, targetZ
     targetX = x
     targetY = y
     targetZ = z
-
+initCV()
 if __name__ == '__main__':
-    while True:
-        # video handling
-        track(42)
-        print(marker_ids)
-        video()
+
 
     cv2.destroyAllWindows()
 

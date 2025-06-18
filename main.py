@@ -1,8 +1,10 @@
 from track import *
 
-setTargetPos(0,0,2)
+def program():
+    while True:
+        track(-1)
 
-takeoff()
-moveTo(20)
-land()
-graph()
+thread = threading.Thread(target=program)
+thread.start()
+
+video()
